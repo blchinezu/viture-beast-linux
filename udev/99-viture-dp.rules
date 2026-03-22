@@ -1,0 +1,11 @@
+# Force RBR link rate when Viture glasses are connected, reset when disconnected.
+# Viture USB: VID=35ca PID=1102
+
+# On any DP link state change (mode switch, hotplug), check what's connected
+ACTION=="change", SUBSYSTEM=="drm", KERNEL=="card1-DP-1", RUN+="/usr/local/bin/viture-dp-helper"
+
+# Viture USB appears (may arrive after DRM change event)
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="35ca", ATTR{idProduct}=="1102", RUN+="/usr/local/bin/viture-dp-helper"
+
+# Viture USB removed — reset link for normal monitors
+ACTION=="remove", SUBSYSTEM=="usb", ENV{ID_VENDOR_ID}=="35ca", ENV{ID_MODEL_ID}=="1102", RUN+="/usr/local/bin/viture-dp-helper"

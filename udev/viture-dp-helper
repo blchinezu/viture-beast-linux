@@ -1,0 +1,19 @@
+#!/bin/bash
+# Automatically manage DP link settings based on connected device.
+# Viture glasses need forced RBR (4 0x6 0) to work with 120Hz/ultrawide.
+# Dell (and other monitors) need auto or higher link rates.
+
+LINK="/sys/kernel/debug/dri/1/DP-1/link_settings"
+
+if ! [ -w "$LINK" ] 2>/dev/null; then
+    exit 0
+fi
+
+if lsusb -d 35ca:1102 > /dev/null 2>&1; then
+    # Viture connected: force 4-lane RBR
+    echo "4 0x6 0" > "$LINK" 2>/dev/null
+else
+    # Viture not connected: reset for normal monitors
+    # Try auto-reset first, fall back to HBR2 (known to work for Dell)
+    echo "0 0" > "$LINK" 2>/dev/null || echo "4 0x14" > "$LINK" 2>/dev/null
+fi
