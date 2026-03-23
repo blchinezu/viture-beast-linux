@@ -1,6 +1,6 @@
 # viture-beast-linux
 
-Fix for Viture Beast XR glasses 120Hz and ultrawide modes breaking on Linux over USB-C DisplayPort Alt Mode.
+Fix for Viture Beast XR glasses 120Hz and ultrawide modes breaking on Linux over USB-C DisplayPort Alt Mode, plus experimental EDID overclocking beyond the stock 120 Hz limit.
 
 ## The problem
 
@@ -39,6 +39,10 @@ Both 1080p@120Hz and 3840x1080@60Hz have a pixel clock of 297 MHz:
 | 1080p@60Hz | 148.5 MHz | 3.56 Gbps | 2.38 Gbps | fits at RGB |
 | 1080p@120Hz | 297.0 MHz | 7.13 Gbps | 4.75 Gbps | fits at 4:2:2 only |
 | 3840x1080@60Hz | 297.0 MHz | 7.13 Gbps | 4.75 Gbps | fits at 4:2:2 only |
+| 1080p@130Hz | 321.75 MHz | 7.72 Gbps | 5.15 Gbps | fits at 4:2:2 **(OC)** |
+| 3840x1080@65Hz | 321.75 MHz | 7.72 Gbps | 5.15 Gbps | fits at 4:2:2 **(OC)** |
+
+The overclocked modes squeeze under the RBR ceiling with <1% margin (5148 of 5184 Mbps). See [Overclocking](#overclocking) below.
 
 ## Installation
 
@@ -84,9 +88,40 @@ sudo udevadm control --reload-rules
 
 ## EDID reference
 
-The [edid/](edid/) directory contains raw EDID dumps captured from the Viture Beast XR glasses in each of their three modes, plus a Python script that merges all three modes into a single EDID binary.
+The [edid/](edid/) directory contains raw EDID dumps captured from the Viture Beast XR glasses in each of their three modes, plus scripts to build a merged EDID (stock modes only) and an overclocked EDID (stock + OC modes).
 
-This is provided for **reference and informational purposes** - the udev fix does not require a custom EDID. It may be useful if your system does not recognize the glasses' modes at all, or if you need to override the EDID for other reasons (e.g., the glasses' USB-C renegotiation fails entirely with `EPROTO` errors on your USB-C controller). See the [EDID README](edid/README.md) for details.
+The stock merged EDID is provided for **reference and compatibility** - the udev fix does not require a custom EDID. It may be useful if your system does not recognize the glasses' modes at all, or if you need to override the EDID for other reasons (e.g., the glasses' USB-C renegotiation fails entirely with `EPROTO` errors on your USB-C controller). See the [EDID README](edid/README.md) for details.
+
+## Overclocking
+
+The glasses' EDID declares a 300 MHz maximum pixel clock, but this is a firmware-imposed soft limit. The [Viture Pro XR has been overclocked](https://github.com/DaniXmir/GlassVr) to 3840x1080@95Hz (~420 MHz pixel clock) via CRU on Windows - proving the bridge chip family handles well above 300 MHz. The Beast, being newer hardware, should have similar or better headroom.
+
+The [edid/](edid/) directory includes an overclocked EDID (`edid_viture_beast_overclock.bin`) with four additional modes beyond the stock three:
+
+| Mode | Pixel Clock | Blanking | Link requirement |
+|------|-----------|---------|-----------------|
+| 1920x1080@130Hz | 321.75 MHz | Standard CEA | RBR + YCbCr 4:2:2 (AMD udev fix) |
+| 3840x1080@65Hz | 321.75 MHz | Standard | RBR + YCbCr 4:2:2 (AMD udev fix) |
+| 1920x1080@144Hz | 330.38 MHz | CVT-RB | HBR or above |
+| 3840x1080@90Hz | 397.08 MHz | CVT-RB | HBR2 or above |
+
+The 130 Hz and 65 Hz modes use identical blanking to the stock 120 Hz and ultrawide modes - only the pixel clock changes. This is the safest overclock: the scaler sees the same timing structure it already accepts, just 8.3% faster.
+
+Deploy the overclocked EDID as a kernel-level override:
+
+```bash
+sudo mkdir -p /lib/firmware/edid
+sudo cp edid/edid_viture_beast_overclock.bin /lib/firmware/edid/
+
+# Add to GRUB_CMDLINE_LINUX in /etc/default/grub:
+#   drm.edid_firmware=DP-1:edid/edid_viture_beast_overclock.bin
+# (replace DP-1 with your connector: ls /sys/class/drm/)
+
+sudo update-grub
+sudo reboot
+```
+
+This is **experimental** - the glasses may display artifacts or go black if the scaler rejects a timing. If things go wild, removing the kernel parameter and rebooting restores normal operation. See the [EDID README](edid/README.md) for full details on bandwidth constraints, theoretical maximums, and risks.
 
 ## Tested hardware
 
@@ -94,7 +129,6 @@ This is provided for **reference and informational purposes** - the udev fix doe
 |---------|-----------------|-----|:---:|:---:|:---:|-------|
 | Lenovo Yoga Slim 7 14ARE05 | AMD UCSI (Renoir) | Ubuntu 25.10 | works | works with udev fix | works with udev fix | Ryzen 7 4800U, amdgpu, Wayland |
 | ASUS ROG Strix G733CX | Intel Thunderbolt | Ubuntu 24.04 | works | works natively | works natively | i9-12950HX, no fix needed |
-| Samsung Galaxy S23 Ultra | Qualcomm | Android | works | broken | broken | USB-C renegotiation fails with EPROTO |
 
 ## Troubleshooting
 
